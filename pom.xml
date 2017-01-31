@@ -30,6 +30,7 @@
 
     <modules>
         <module>http/netty</module>
+        <module>file</module>
     </modules>
 
     <scm>
