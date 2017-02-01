@@ -82,10 +82,6 @@ public class FileTransportListener extends PollingTransportListener {
         //nothing to do
     }
 
-    public void startPolling() {
-
-    }
-
     @Override
     public void poll(Map<String, String> map) {
         Properties fileProperties = new Properties();
