@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.wso2.carbon.messaging.CarbonMessageProcessor;
 import org.wso2.carbon.transport.file.common.PeriodicTask;
+import org.wso2.carbon.transport.file.common.PollingTaskScheduler;
 import org.wso2.carbon.transport.file.common.config.PollingTransportParams;
 import org.wso2.carbon.transport.file.common.exception.InvalidConfigurationException;
 import org.wso2.carbon.transport.file.listener.config.FileTransportParams;

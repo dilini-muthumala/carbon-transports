@@ -21,26 +21,22 @@ package org.wso2.carbon.transport.file.listener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.wso2.carbon.messaging.CarbonMessageProcessor;
-import org.wso2.carbon.messaging.TransportListener;
+import org.wso2.carbon.messaging.PollingTransportListener;
 import org.wso2.carbon.transport.file.common.exception.InvalidConfigurationException;
 import org.wso2.carbon.transport.file.listener.config.FileTransportParams;
 import org.wso2.carbon.transport.file.listener.util.Constants;
 
+import java.util.Map;
 import java.util.Properties;
 
 import static org.wso2.carbon.transport.file.common.config.PollingTransportParams.POLLING_INTERVAL;
 import static org.wso2.carbon.transport.file.listener.util.Constants.TRANSPORT_FILE_FILE_URI;
 
-public class FileTransportListener extends TransportListener {
+public class FileTransportListener extends PollingTransportListener {
     private static final Logger log = LoggerFactory.getLogger(FileTransportListener.class);
 
     private CarbonMessageProcessor messageProcessor;
     private FilePollingTask filePollingTask;
-
-
-    public FileTransportListener(String id) {
-        super(id);
-    }
 
     @Override
     public void setMessageProcessor(CarbonMessageProcessor carbonMessageProcessor) {
@@ -87,6 +83,11 @@ public class FileTransportListener extends TransportListener {
     }
 
     public void startPolling() {
+
+    }
+
+    @Override
+    public void poll(Map<String, String> map) {
         Properties fileProperties = new Properties();
         fileProperties.put(TRANSPORT_FILE_FILE_URI, "file:///home/dilini/Desktop/myfile.txt");//// TODO: 1/30/17 these  params will be read from paramers, coming from Bal side.
         fileProperties.put(POLLING_INTERVAL, "1");

@@ -29,7 +29,7 @@
 
     <modelVersion>4.0.0</modelVersion>
     <artifactId>org.wso2.carbon.transport.file</artifactId>
-    <packaging>bundle</packaging>
+    <packaging>jar</packaging>
     <name>WSO2 Carbon Transport File Component</name>
     <description>Carbon File Transport</description>
 
@@ -45,10 +45,6 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
-        <!--<dependency>-->
-            <!--<groupId>commons-pool.wso2</groupId>-->
-            <!--<artifactId>commons-pool</artifactId>-->
-        <!--</dependency>-->
         <dependency>
             <groupId>org.wso2.carbon.messaging</groupId>
             <artifactId>org.wso2.carbon.messaging</artifactId>
@@ -68,34 +64,6 @@
             <artifactId>testng</artifactId>
             <scope>test</scope>
         </dependency>
-        <!--<dependency>-->
-            <!--<groupId>org.testng</groupId>-->
-            <!--<artifactId>testng</artifactId>-->
-            <!--<scope>test</scope>-->
-        <!--</dependency>-->
-        <!--<dependency>-->
-            <!--<groupId>commons-io.wso2</groupId>-->
-            <!--<artifactId>commons-io</artifactId>-->
-            <!--<version>${commons-io.wso2.version}</version>-->
-            <!--<scope>test</scope>-->
-        <!--</dependency>-->
-        <!--<dependency>-->
-            <!--<groupId>com.google.guava</groupId>-->
-            <!--<artifactId>guava</artifactId>-->
-            <!--<version>${guava.version}</version>-->
-            <!--<scope>test</scope>-->
-        <!--</dependency>-->
     </dependencies>
-
-    <properties>
-        <private.package>org.wso2.carbon.transport.file.internal</private.package>
-        <export.package>
-            !org.wso2.carbon.transport.file.internal,
-            org.wso2.carbon.transport.file.*
-        </export.package>
-        <import.package>
-            *;resolution:=optional
-        </import.package>
-    </properties>
 
 </project>
