@@ -27,7 +27,7 @@ import org.wso2.carbon.transport.file.common.config.PollingTransportParams;
 import org.wso2.carbon.transport.file.common.exception.InvalidConfigurationException;
 import org.wso2.carbon.transport.file.listener.config.FileTransportParams;
 
-import java.util.Properties;
+import java.util.Map;
 
 /**
  * Polls for a file or a folder periodically, at a given location.
@@ -37,19 +37,22 @@ public class FilePollingTask extends PollingTaskScheduler {
     private static final Logger log = LoggerFactory.getLogger(FilePollingTask.class);
 
     private FilePollingConsumer filePollingConsumer;
-    private Properties vfsProperties;
+    private Map<String, String> vfsProperties;
     private CarbonMessageProcessor messageProcessor;
 
-    public FilePollingTask(FileTransportParams params, CarbonMessageProcessor messageProcessor) throws InvalidConfigurationException {
+    public FilePollingTask(FileTransportParams params, CarbonMessageProcessor messageProcessor)
+            throws InvalidConfigurationException {
         this.name = params.getName();
         this.vfsProperties = params.getProperties();
         this.messageProcessor = messageProcessor;
+        String interval = vfsProperties.get(PollingTransportParams.POLLING_INTERVAL);
         try {
-            this.interval = Long.parseLong(vfsProperties
-                    .getProperty(PollingTransportParams.POLLING_INTERVAL));
+            if (interval != null) {
+                this.interval = Long.parseLong(interval);
+            }
         } catch (NumberFormatException e) {
             throw new InvalidConfigurationException("Invalid number format provided for property '" +
-                    PollingTransportParams.POLLING_INTERVAL + "'",e);
+                    PollingTransportParams.POLLING_INTERVAL + "'", e);
         }
     }
 
@@ -58,7 +61,7 @@ public class FilePollingTask extends PollingTaskScheduler {
      */
     public void init() {
         log.info("Inbound file listener " + name + " starting ...");
-        filePollingConsumer = new FilePollingConsumer(vfsProperties, name, interval, messageProcessor);
+//        filePollingConsumer = new FilePollingConsumer(vfsProperties, name, interval, messageProcessor);
         start();
     }
 

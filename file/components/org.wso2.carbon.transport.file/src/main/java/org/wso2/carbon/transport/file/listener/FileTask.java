@@ -39,6 +39,6 @@ public class FileTask extends PeriodicTask {
 
     protected void taskExecute() {
         logger.debug("File-polling task: " + getName() + " executing...");
-        pollingConsumer.execute();
+//        pollingConsumer.execute();
     }
 }

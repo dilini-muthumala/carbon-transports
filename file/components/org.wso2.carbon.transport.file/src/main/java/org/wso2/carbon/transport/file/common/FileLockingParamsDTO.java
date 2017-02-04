@@ -18,6 +18,9 @@
 
 package org.wso2.carbon.transport.file.common;
 
+/**
+ *  This class stores parameters which are related to locking a file.
+ */
 public class FileLockingParamsDTO {
     private boolean autoLockRelease = false;
     private boolean autoLockReleaseSameNode = true;

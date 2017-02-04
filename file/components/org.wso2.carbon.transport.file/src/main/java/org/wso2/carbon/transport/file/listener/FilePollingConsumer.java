@@ -39,17 +39,23 @@ import org.wso2.carbon.transport.file.listener.util.Constants;
 import org.wso2.carbon.transport.file.listener.util.FileTransportUtils;
 import org.wso2.carbon.transport.file.message.FileCarbonMessage;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Properties;
-
-import static java.lang.Math.toIntExact;
 
 /**
  * Polls for a file and consumes it.
@@ -57,7 +63,7 @@ import static java.lang.Math.toIntExact;
 public class FilePollingConsumer {
 
     private static final Log log = LogFactory.getLog(FilePollingConsumer.class);
-    private Properties vfsProperties;
+    private Map<String, String> vfsProperties;
     private boolean fileLock = true;
     private FileSystemManager fsManager = null;
     private String name;
@@ -79,12 +85,8 @@ public class FilePollingConsumer {
     private Long autoLockReleaseInterval;
     private FileSystemOptions fso;
 
-    public FilePollingConsumer(Properties vfsProperties, String name, long scanInterval, CarbonMessageProcessor messageProcessor) {
+    public FilePollingConsumer(Map<String, String> vfsProperties) {
         this.vfsProperties = vfsProperties;
-        this.name = name;
-        this.scanInterval = scanInterval;
-        this.lastRanTime = null;
-        this.messageProcessor = messageProcessor;
 
         setupParams();
         try {
@@ -110,28 +112,28 @@ public class FilePollingConsumer {
      * more than the schedule interval, tasks will call this method ignoring the
      * interval. Timestamp based check is done to avoid that.
      */
-    public void execute() {
-        try {
-            if (log.isDebugEnabled()) {
-                log.debug("Start : File-polling for : " + name);
-            }
-            // Check if the cycles are running in correct interval and start
-            // scan
-            long currentTime = (new Date()).getTime();
-            if (lastRanTime == null || ((lastRanTime + (scanInterval)) <= currentTime)) {
-                lastRanTime = currentTime;
-                poll();
-            } else if (log.isDebugEnabled()) {
-                log.debug("Skip file-polling cycle since current rate is higher than the scan interval, for : "
-                        + name);
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("End : File-polling for : " + name);
-            }
-        } catch (Exception e) {
-            log.error("Error while reading file. " + e.getMessage(), e);
-        }
-    }
+//    public void execute() {
+//        try {
+//            if (log.isDebugEnabled()) {
+//                log.debug("Start : File-polling for : " + name);
+//            }
+//            // Check if the cycles are running in correct interval and start
+//            // scan
+//            long currentTime = (new Date()).getTime();
+//            if (lastRanTime == null || ((lastRanTime + (scanInterval)) <= currentTime)) {
+//                lastRanTime = currentTime;
+//                poll();
+//            } else if (log.isDebugEnabled()) {
+//                log.debug("Skip file-polling cycle since current rate is higher than the scan interval, for : "
+//                        + name);
+//            }
+//            if (log.isDebugEnabled()) {
+//                log.debug("End : File-polling for : " + name);
+//            }
+//        } catch (Exception e) {
+//            log.error("Error while reading file. " + e.getMessage(), e);
+//        }
+//    }
 
     /**
      * Do the file processing operation for the given set of properties. Do the
@@ -181,7 +183,8 @@ public class FilePollingConsumer {
                             lastCycle = 2;
                             moveOrDeleteAfterProcessing(fileObject);
                         } catch (FileTransportException transportException) {
-                            log.error("File object '" + FileTransportUtils.maskURLPassword(fileObject.getURL().toString()) + "' "
+                            log.error("File object '" + FileTransportUtils.
+                                    maskURLPassword(fileObject.getURL().toString()) + "' "
                                     + "cloud not be moved after first attempt", transportException);
                         }
                         if (fileLock) {
@@ -224,7 +227,7 @@ public class FilePollingConsumer {
                 if (fsManager != null) {
                     fsManager.closeFileSystem(fileObject.getParent().getFileSystem());
                 }
-                fileObject.close();
+//                fileObject.close();
             } catch (Exception e) {
                 log.error("Unable to close the file system. " + e.getMessage());
                 log.error(e);
@@ -243,7 +246,7 @@ public class FilePollingConsumer {
      */
     private void fileHandler() throws FileSystemException {
         if (fileObject.getType() == FileType.FILE) {
-            if (!fileLock || (fileLock && acquireLock(fsManager, fileObject))) {
+            if (!fileLock || acquireLock(fsManager, fileObject)) {
                 boolean runPostProcess = true;
                 try {
                     if (processFile(fileObject) == null) {
@@ -261,7 +264,8 @@ public class FilePollingConsumer {
                         moveOrDeleteAfterProcessing(fileObject);
                     } catch (FileTransportException synapseException) {
                         lastCycle = 3;
-                        log.error("File object '" + FileTransportUtils.maskURLPassword(fileObject.getURL().toString()) + "' "
+                        log.error("File object '" + FileTransportUtils.
+                                maskURLPassword(fileObject.getURL().toString()) + "' "
                                 + "cloud not be moved", synapseException);
                         FileTransportUtils.markFailRecord(fsManager, fileObject);
                     }
@@ -271,8 +275,10 @@ public class FilePollingConsumer {
                     // TODO: passing null to avoid build break. Fix properly
                     FileTransportUtils.releaseLock(fsManager, fileObject, fso);
                     if (log.isDebugEnabled()) {
-                        log.debug("Removed the lock file '" + FileTransportUtils.maskURLPassword(fileObject.toString())
-                                + ".lock' of the file '" + FileTransportUtils.maskURLPassword(fileObject.toString()));
+                        log.debug("Removed the lock file '" +
+                                FileTransportUtils.maskURLPassword(fileObject.toString())
+                                + ".lock' of the file '" +
+                                FileTransportUtils.maskURLPassword(fileObject.toString()));
                     }
                 }
 
@@ -294,58 +300,59 @@ public class FilePollingConsumer {
      */
     private void setupParams() {
 
-        fileURI = vfsProperties.getProperty(Constants.TRANSPORT_FILE_FILE_URI);
+        fileURI = vfsProperties.get(Constants.TRANSPORT_FILE_FILE_URI);
 
-        String strFileLock = vfsProperties.getProperty(Constants.TRANSPORT_FILE_LOCKING);
+        String strFileLock = vfsProperties.get(Constants.TRANSPORT_FILE_LOCKING);
         if (strFileLock != null
-                && strFileLock.toLowerCase().equals(Constants.TRANSPORT_FILE_LOCKING_DISABLED)) {
+                && strFileLock.toLowerCase(Locale.US).equals(Constants.TRANSPORT_FILE_LOCKING_DISABLED)) {
             fileLock = false;
         }
 
-        strFilePattern = vfsProperties.getProperty(Constants.TRANSPORT_FILE_FILE_NAME_PATTERN);
-        if (vfsProperties.getProperty(Constants.TRANSPORT_FILE_INTERVAL) != null) {
+        strFilePattern = vfsProperties.get(Constants.TRANSPORT_FILE_FILE_NAME_PATTERN);
+        if (vfsProperties.get(Constants.TRANSPORT_FILE_INTERVAL) != null) {
             try {
                 iFileProcessingInterval = Integer.valueOf(vfsProperties
-                        .getProperty(Constants.TRANSPORT_FILE_INTERVAL));
+                        .get(Constants.TRANSPORT_FILE_INTERVAL));
             } catch (NumberFormatException e) {
-                log.warn("Invalid param value for transport.vfs.FileProcessInterval : "
-                        + vfsProperties.getProperty(Constants.TRANSPORT_FILE_INTERVAL)
+                log.warn("Invalid param value for " + Constants.TRANSPORT_FILE_INTERVAL + " : "
+                        + vfsProperties.get(Constants.TRANSPORT_FILE_INTERVAL)
                         + ". Expected numeric value.");
             }
         }
-        if (vfsProperties.getProperty(Constants.TRANSPORT_FILE_COUNT) != null) {
+        if (vfsProperties.get(Constants.TRANSPORT_FILE_COUNT) != null) {
             try {
                 iFileProcessingCount = Integer.valueOf(vfsProperties
-                        .getProperty(Constants.TRANSPORT_FILE_COUNT));
+                        .get(Constants.TRANSPORT_FILE_COUNT));
             } catch (NumberFormatException e) {
-                log.warn("Invalid param value for transport.vfs.FileProcessCount : "
-                        + vfsProperties.getProperty(Constants.TRANSPORT_FILE_COUNT)
+                log.warn("Invalid param value for " + Constants.TRANSPORT_FILE_COUNT + " : "
+                        + vfsProperties.get(Constants.TRANSPORT_FILE_COUNT)
                         + ". Expected numeric value.");
             }
         }
         maxRetryCount = 0;
-        if (vfsProperties.getProperty(Constants.MAX_RETRY_COUNT) != null) {
+        if (vfsProperties.get(Constants.MAX_RETRY_COUNT) != null) {
             try {
-                maxRetryCount = Integer.valueOf(vfsProperties
-                        .getProperty(Constants.MAX_RETRY_COUNT));
+                maxRetryCount = Integer.parseInt(vfsProperties
+                        .get(Constants.MAX_RETRY_COUNT));
             } catch (NumberFormatException e) {
-                log.warn("Invalid values for Max Retry Count");
+                log.warn("Invalid values for " + Constants.MAX_RETRY_COUNT);
                 maxRetryCount = 0;
             }
         }
 
         reconnectionTimeout = 1;
-        if (vfsProperties.getProperty(Constants.RECONNECT_TIMEOUT) != null) {
+        if (vfsProperties.get(Constants.RECONNECT_TIMEOUT) != null) {
             try {
-                reconnectionTimeout = Long.valueOf(vfsProperties
-                        .getProperty(Constants.RECONNECT_TIMEOUT));
+                reconnectionTimeout = Long.parseLong(vfsProperties
+                        .get(Constants.RECONNECT_TIMEOUT));
             } catch (NumberFormatException e) {
-                log.warn("Invalid values for Reconnection Timeout");
+                //todo: warn message needs to be improved to show the default value.
+                log.warn("Invalid values for " + Constants.RECONNECT_TIMEOUT);
                 reconnectionTimeout = 1;
             }
         }
 
-        String strAutoLock = vfsProperties.getProperty(Constants.TRANSPORT_AUTO_LOCK_RELEASE);
+        String strAutoLock = vfsProperties.get(Constants.TRANSPORT_AUTO_LOCK_RELEASE);
         autoLockRelease = false;
         autoLockReleaseSameNode = true;
         autoLockReleaseInterval = null;
@@ -354,32 +361,31 @@ public class FilePollingConsumer {
                 autoLockRelease = Boolean.parseBoolean(strAutoLock);
             } catch (Exception e) {
                 autoLockRelease = false;
-                log.warn("VFS Auto lock removal not set properly. Current value is : "
-                        + strAutoLock, e);
+                log.warn(Constants.TRANSPORT_AUTO_LOCK_RELEASE + " property should be" +
+                        " a boolean. Given value is : " + strAutoLock, e);
             }
             if (autoLockRelease) {
                 String strAutoLockInterval = vfsProperties
-                        .getProperty(Constants.TRANSPORT_AUTO_LOCK_RELEASE_INTERVAL);
+                        .get(Constants.TRANSPORT_AUTO_LOCK_RELEASE_INTERVAL);
                 if (strAutoLockInterval != null) {
                     try {
                         autoLockReleaseInterval = Long.parseLong(strAutoLockInterval);
                     } catch (Exception e) {
                         autoLockReleaseInterval = null;
-                        log.warn(
-                                "VFS Auto lock removal property not set properly. Current value is : "
-                                        + strAutoLockInterval, e);
+                        log.warn(Constants.TRANSPORT_AUTO_LOCK_RELEASE_INTERVAL + " property " +
+                                "should be a Long. Given value is : " + strAutoLockInterval, e);
                     }
                 }
                 String strAutoLockReleaseSameNode = vfsProperties
-                        .getProperty(Constants.TRANSPORT_AUTO_LOCK_RELEASE_SAME_NODE);
+                        .get(Constants.TRANSPORT_AUTO_LOCK_RELEASE_SAME_NODE);
                 if (strAutoLockReleaseSameNode != null) {
                     try {
                         autoLockReleaseSameNode = Boolean.parseBoolean(strAutoLockReleaseSameNode);
                     } catch (Exception e) {
                         autoLockReleaseSameNode = true;
-                        log.warn(
-                                "VFS Auto lock removal property not set properly. Current value is : "
-                                        + autoLockReleaseSameNode, e);
+                        log.warn(Constants.TRANSPORT_AUTO_LOCK_RELEASE_SAME_NODE +
+                                " property should be a boolean. Given value is : "
+                                + strAutoLockReleaseSameNode, e);
                     }
                 }
             }
@@ -394,19 +400,14 @@ public class FilePollingConsumer {
         }
         HashMap<String, String> schemeFileOptions = new HashMap<String, String>();
         schemeFileOptions.put(Constants.SCHEME, scheme);
-
-        try {
-            addOptions(scheme, schemeFileOptions);
-        } catch (Exception e) {
-            log.warn("Error while loading VFS parameter. " + e.getMessage());
-        }
+        addOptions(scheme, schemeFileOptions);
         return schemeFileOptions;
     }
 
     private void addOptions(String scheme, Map<String, String> schemeFileOptions) {
         if (scheme.equals(Constants.SCHEME_SFTP)) {
-            for (Constants.SFTP_FILE_OPTION option : Constants.SFTP_FILE_OPTION.values()) {
-                String strValue = vfsProperties.getProperty(Constants.SFTP_PREFIX
+            for (Constants.SftpFileOption option : Constants.SftpFileOption.values()) {
+                String strValue = vfsProperties.get(Constants.SFTP_PREFIX
                         + WordUtils.capitalize(option.toString()));
                 if (strValue != null && !strValue.equals("")) {
                     schemeFileOptions.put(option.toString(), strValue);
@@ -431,38 +432,44 @@ public class FilePollingConsumer {
 
         if (log.isDebugEnabled()) {
             log.debug("File name pattern : "
-                    + vfsProperties.getProperty(Constants.TRANSPORT_FILE_FILE_NAME_PATTERN));
+                    + vfsProperties.get(Constants.TRANSPORT_FILE_FILE_NAME_PATTERN));
         }
 
         // Sort the files
-        String strSortParam = vfsProperties.getProperty(Constants.FILE_SORT_PARAM);
+        String strSortParam = vfsProperties.get(Constants.FILE_SORT_PARAM);
         if (strSortParam != null && !"NONE".equals(strSortParam)) {
-            log.debug("Start Sorting the files.");
-            String strSortOrder = vfsProperties.getProperty(Constants.FILE_SORT_ORDER);
-            boolean bSortOrderAsscending = true;
-            if (strSortOrder != null && strSortOrder.toLowerCase().equals("false")) {
-                bSortOrderAsscending = false;
+            log.debug("Start sorting the files.");
+            String strSortOrder = vfsProperties.get(Constants.FILE_SORT_ORDER);
+            boolean bSortOrderAscending = true;
+            if (strSortOrder != null) {
+                try {
+                    bSortOrderAscending = Boolean.parseBoolean(strSortOrder);
+                } catch (RuntimeException re) {
+                    log.warn(Constants.FILE_SORT_ORDER + " parameter should be either " +
+                            "\"true\" or \"false\". Found: " + strSortOrder +
+                            ". Assigning default value \"true\".");
+                }
             }
             if (log.isDebugEnabled()) {
-                log.debug("Sorting the files by : " + strSortOrder + ". (" + bSortOrderAsscending
+                log.debug("Sorting the files by : " + strSortOrder + ". (" + bSortOrderAscending
                         + ")");
             }
-            if (strSortParam.equals(Constants.FILE_SORT_VALUE_NAME) && bSortOrderAsscending) {
+            if (strSortParam.equals(Constants.FILE_SORT_VALUE_NAME) && bSortOrderAscending) {
                 Arrays.sort(children, new FileNameAscComparator());
             } else if (strSortParam.equals(Constants.FILE_SORT_VALUE_NAME)
-                    && !bSortOrderAsscending) {
+                    && !bSortOrderAscending) {
                 Arrays.sort(children, new FileNameDesComparator());
             } else if (strSortParam.equals(Constants.FILE_SORT_VALUE_SIZE)
-                    && bSortOrderAsscending) {
+                    && bSortOrderAscending) {
                 Arrays.sort(children, new FileSizeAscComparator());
             } else if (strSortParam.equals(Constants.FILE_SORT_VALUE_SIZE)
-                    && !bSortOrderAsscending) {
+                    && !bSortOrderAscending) {
                 Arrays.sort(children, new FileSizeDesComparator());
             } else if (strSortParam.equals(Constants.FILE_SORT_VALUE_LASTMODIFIEDTIMESTAMP)
-                    && bSortOrderAsscending) {
+                    && bSortOrderAscending) {
                 Arrays.sort(children, new FileLastmodifiedtimestampAscComparator());
             } else if (strSortParam.equals(Constants.FILE_SORT_VALUE_LASTMODIFIEDTIMESTAMP)
-                    && !bSortOrderAsscending) {
+                    && !bSortOrderAscending) {
                 Arrays.sort(children, new FileLastmodifiedtimestampDesComparator());
             }
             log.debug("End Sorting the files.");
@@ -485,12 +492,13 @@ public class FilePollingConsumer {
                     log.debug("Matching file : " + child.getName().getBaseName());
                 }
 
-                if ((!fileLock || (fileLock && acquireLock(fsManager, child)))) {
+                if ((!fileLock || acquireLock(fsManager, child))) {
                     // process the file
                     boolean runPostProcess = true;
                     try {
                         if (log.isDebugEnabled()) {
-                            log.debug("Processing file :" + FileTransportUtils.maskURLPassword(child.toString()));
+                            log.debug("Processing file :" + FileTransportUtils.
+                                    maskURLPassword(child.toString()));
                         }
                         processCount++;
                         if (processFile(child) == null) {
@@ -522,7 +530,8 @@ public class FilePollingConsumer {
                         try {
                             moveOrDeleteAfterProcessing(child);
                         } catch (FileTransportException fileTransportException) {
-                            log.error("File object '" + FileTransportUtils.maskURLPassword(child.getURL().toString())
+                            log.error("File object '" + FileTransportUtils.
+                                            maskURLPassword(child.getURL().toString())
                                             + "'cloud not be moved, will remain in \"locked\" state",
                                     fileTransportException);
                             skipUnlock = true;
@@ -548,7 +557,8 @@ public class FilePollingConsumer {
                     lastCycle = 1;
                     moveOrDeleteAfterProcessing(child);
                 } catch (FileTransportException fileTransportException) {
-                    log.error("File object '" + FileTransportUtils.maskURLPassword(child.getURL().toString())
+                    log.error("File object '" + FileTransportUtils.
+                            maskURLPassword(child.getURL().toString())
                             + "'cloud not be moved, will remain in \"fail\" state", fileTransportException);
                 }
                 if (fileLock) {
@@ -557,22 +567,25 @@ public class FilePollingConsumer {
                     FileTransportUtils.releaseLock(fsManager, fileObject, fso);
                 }
                 if (log.isDebugEnabled()) {
-                    log.debug("File '" + FileTransportUtils.maskURLPassword(fileObject.getURL().toString())
+                    log.debug("File '" + FileTransportUtils.
+                            maskURLPassword(fileObject.getURL().toString())
                             + "' has been marked as a failed record, it will not " + "process");
                 }
             }
 
             //close the file system after processing
             try {
-                child.close();
+//                child.close();      //todo: debug child.getName().getPath()
             } catch (Exception e) {
+                log.warn("Could not close the file: " + child.getName().getPath());
             }
 
             // Manage throttling of file processing
             if (iFileProcessingInterval != null && iFileProcessingInterval > 0) {
                 try {
                     if (log.isDebugEnabled()) {
-                        log.debug("Put the VFS processor to sleep for : " + iFileProcessingInterval);
+                        log.debug("Putting the File processor to sleep for : "
+                                + iFileProcessingInterval);
                     }
                     Thread.sleep(iFileProcessingInterval);
                 } catch (InterruptedException ie) {
@@ -616,7 +629,8 @@ public class FilePollingConsumer {
                                     + FileTransportUtils.maskURLPassword(fileURI), e);
                     return false;
                 } else {
-                    log.warn("Failed to resolve the file URI: " + FileTransportUtils.maskURLPassword(fileURI)
+                    log.warn("Failed to resolve the file URI: "
+                            + FileTransportUtils.maskURLPassword(fileURI)
                             + ", in attempt " + retryCount + ", " + e.getMessage()
                             + " Retrying in " + reconnectionTimeout + " milliseconds.");
                 }
@@ -662,7 +676,8 @@ public class FilePollingConsumer {
         lockingParamsDTO.setAutoLockRelease(autoLockRelease);
         lockingParamsDTO.setAutoLockReleaseSameNode(autoLockReleaseSameNode);
         lockingParamsDTO.setAutoLockReleaseInterval(autoLockReleaseInterval);
-        rtnValue = FileTransportUtils.acquireLock(fsManager, fileObject, lockingParamsDTO, fso, true);
+        rtnValue = FileTransportUtils.acquireLock(fsManager, fileObject, lockingParamsDTO,
+                fso, true);
         return rtnValue;
     }
 
@@ -693,24 +708,110 @@ public class FilePollingConsumer {
                 log.warn("Unable to set file length or last modified date header.", e);
             }
 
-            CarbonMessage cMessage = new FileCarbonMessage();
-            cMessage.setProperty("TRANSPORT_HEADERS", transportHeaders);    // TODO: 1/31/17 find the const to replace TRANSPORT_HEADERS
-            byte[] byteArr = new byte[toIntExact(content.getSize())];
-            content.getOutputStream().write(byteArr);
-
-            ByteBuffer byteBuffer = ByteBuffer.wrap(byteArr);
-            cMessage.addMessageBody(byteBuffer);
-            // TODO: 1/30/17 IMPORTANT there's a classcast exception here.
-
+            CarbonMessage cMessage = new FileCarbonMessage(content.getInputStream());
+//            CarbonMessage cMessage = new TextCarbonMessage(getStringFromInputStream(content.getInputStream()));
+//            log.info("trans: " + getStringFromInputStream(cMessage.getInputStream()));
+//            log.info("trans2: " + getStringFromInputStream(cMessage.getInputStream()));
+            cMessage.setProperty(org.wso2.carbon.messaging.Constants.PROTOCOL, Constants.PROTOCOL_NAME);
+            cMessage.setProperty(Constants.FILE_TRANSPORT_PROPERTY_SERVICE_NAME, name);
+            cMessage.setProperty("TRANSPORT_HEADERS", transportHeaders);
+            // TODO: 1/31/17 find the const to replace TRANSPORT_HEADERS
+//            ByteBuffer byteBuffer = ByteBuffer.wrap(getBytesFromInputStream(content.getInputStream()));
+//            cMessage.addMessageBody(byteBuffer);
+//            log.info(bb_to_str(cMessage.getMessageBody(), Charset.forName("UTF-8")));
+//            log.info(getStringFromInputStream(cMessage.getInputStream()));
             messageProcessor.receive(cMessage, null);
         } catch (FileSystemException e) {
-            log.error("Error reading file content or attributes : " + FileTransportUtils.maskURLPassword(file.toString()), e);
+            log.error("Error reading file content or attributes : "
+                    + FileTransportUtils.maskURLPassword(file.toString()), e);
         } catch (IOException e) {
             // TODO: 1/27/17
         } catch (Exception e) {
             // TODO: 1/30/17
         }
         return file;
+    }
+
+    public static String bb_to_str(ByteBuffer buffer, Charset charset) {
+        byte[] bytes;
+        if (buffer.hasArray()) {
+            bytes = buffer.array();
+        } else {
+            bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+        }
+        return new String(bytes, charset);
+    }
+
+    public static byte[] getBytesFromInputStream(InputStream is) throws IOException {
+        try (ByteArrayOutputStream os = new ByteArrayOutputStream();) {
+            byte[] buffer = new byte[0xFFFF];
+
+            for (int len; (len = is.read(buffer)) != -1; ) {
+                os.write(buffer, 0, len);
+            }
+
+            os.flush();
+
+            return os.toByteArray();
+        }
+    }
+
+    static String convertStreamToString(java.io.InputStream inputStream) {
+        final int bufferSize = 1024;
+        final char[] buffer = new char[bufferSize];
+        final StringBuilder out = new StringBuilder();
+        Reader in = null;
+        try {
+            in = new InputStreamReader(inputStream, "UTF-8");
+            for (;; ) {
+                int rsz = 0;
+                try {
+                    rsz = in.read(buffer, 0, buffer.length);
+                } catch (IOException e) {
+                    log.error("Error occurred", e);
+                }
+                if (rsz < 0) {
+                    break;
+                }
+                out.append(buffer, 0, rsz);
+            }
+
+        } catch (UnsupportedEncodingException e) {
+            log.error("Unsupported encoding found", e);
+        }
+        return out.toString();
+    }
+
+    public static String getStringFromInputStream(InputStream in) {
+        StringBuilder sb = new StringBuilder(4096);
+        InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8);
+        BufferedReader bufferedReader = new BufferedReader(reader);
+        try {
+            String str;
+            while ((str = bufferedReader.readLine()) != null) {
+                sb.append(str);
+            }
+        } catch (IOException ioe) {
+            log.error("Error occured", ioe);
+        } finally {
+            try {
+                in.close();
+            } catch (IOException e) {
+                // Do nothing.
+            }
+            try {
+                reader.close();
+            } catch (IOException e) {
+                // Do nothing.
+            }
+            try {
+                bufferedReader.close();
+            } catch (IOException e) {
+                // Do nothing.
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -725,12 +826,12 @@ public class FilePollingConsumer {
             switch (lastCycle) {
                 case 1:
                     if (Constants.AFTER_ACTION_MOVE.equals(vfsProperties
-                            .getProperty(Constants.TRANSPORT_FILE_ACTION_AFTER_PROCESS))) {
+                            .get(Constants.TRANSPORT_FILE_ACTION_AFTER_PROCESS))) {
                         moveToDirectoryURI = vfsProperties
-                                .getProperty(Constants.TRANSPORT_FILE_MOVE_AFTER_PROCESS);
+                                .get(Constants.TRANSPORT_FILE_MOVE_AFTER_PROCESS);
                         //Postfix the date given timestamp format
                         String strSubfoldertimestamp = vfsProperties
-                                .getProperty(Constants.SUBFOLDER_TIMESTAMP);
+                                .get(Constants.SUBFOLDER_TIMESTAMP);
                         if (strSubfoldertimestamp != null) {
                             try {
                                 SimpleDateFormat sdf = new SimpleDateFormat(strSubfoldertimestamp);
@@ -753,9 +854,9 @@ public class FilePollingConsumer {
 
                 case 2:
                     if ("MOVE".equals(vfsProperties
-                            .getProperty(Constants.TRANSPORT_FILE_ACTION_AFTER_FAILURE))) {
+                            .get(Constants.TRANSPORT_FILE_ACTION_AFTER_FAILURE))) {
                         moveToDirectoryURI = vfsProperties
-                                .getProperty(Constants.TRANSPORT_FILE_MOVE_AFTER_FAILURE);
+                                .get(Constants.TRANSPORT_FILE_MOVE_AFTER_FAILURE);
                     }
                     break;
 
@@ -766,25 +867,29 @@ public class FilePollingConsumer {
             if (moveToDirectoryURI != null) {
                 FileObject moveToDirectory = fsManager.resolveFile(moveToDirectoryURI, fso);
                 String prefix;
-                if (vfsProperties.getProperty(Constants.TRANSPORT_FILE_MOVE_TIMESTAMP_FORMAT) != null) {
+                if (vfsProperties.get(Constants.TRANSPORT_FILE_MOVE_TIMESTAMP_FORMAT) != null) {
                     prefix = new SimpleDateFormat(
                             vfsProperties
-                                    .getProperty(Constants.TRANSPORT_FILE_MOVE_TIMESTAMP_FORMAT))
+                                    .get(Constants.TRANSPORT_FILE_MOVE_TIMESTAMP_FORMAT))
                             .format(new Date());
                 } else {
                     prefix = "";
                 }
 
                 //Forcefully create the folder(s) if does not exists
-                String strForceCreateFolder = vfsProperties.getProperty(Constants.FORCE_CREATE_FOLDER);
-                if (strForceCreateFolder != null && strForceCreateFolder.toLowerCase().equals("true") && !moveToDirectory.exists()) {
+                String strForceCreateFolder = vfsProperties.get(Constants.FORCE_CREATE_FOLDER);
+                //// TODO: 2/4/17 parse strForceCreateFolder to boolean
+                if (strForceCreateFolder != null
+                        && strForceCreateFolder.toLowerCase(Locale.US).equals("true")
+                        && !moveToDirectory.exists()) {
                     moveToDirectory.createFolder();
                 }
 
                 FileObject dest = moveToDirectory.resolveFile(prefix
                         + fileObject.getName().getBaseName());
                 if (log.isDebugEnabled()) {
-                    log.debug("Moving to file :" + FileTransportUtils.maskURLPassword(dest.getName().getURI()));
+                    log.debug("Moving to file :" + FileTransportUtils.
+                            maskURLPassword(dest.getName().getURI()));
                 }
                 try {
                     fileObject.moveTo(dest);
@@ -795,22 +900,26 @@ public class FilePollingConsumer {
                     if (!FileTransportUtils.isFailRecord(fsManager, fileObject)) {
                         FileTransportUtils.markFailRecord(fsManager, fileObject);
                     }
-                    log.error("Error moving file : " + FileTransportUtils.maskURLPassword(fileObject.toString()) + " to " +
+                    log.error("Error moving file : " + FileTransportUtils.
+                            maskURLPassword(fileObject.toString()) + " to " +
                             FileTransportUtils.maskURLPassword(moveToDirectoryURI), e);
                 }
             } else {
                 try {
                     if (log.isDebugEnabled()) {
-                        log.debug("Deleting file :" + FileTransportUtils.maskURLPassword(fileObject.toString()));
+                        log.debug("Deleting file :" + FileTransportUtils.
+                                maskURLPassword(fileObject.toString()));
                     }
-                    fileObject.close();
+//                    fileObject.close();   // TODO: 2/4/17 uncomment this
                     if (!fileObject.delete()) {
-                        String msg = "Cannot delete file : " + FileTransportUtils.maskURLPassword(fileObject.toString());
+                        String msg = "Cannot delete file : " + FileTransportUtils.
+                                maskURLPassword(fileObject.toString());
                         log.error(msg);
                         throw new FileTransportException(msg);
                     }
                 } catch (FileSystemException e) {
-                    log.error("Error deleting file : " + FileTransportUtils.maskURLPassword(fileObject.toString()), e);
+                    log.error("Error deleting file : " + FileTransportUtils.
+                            maskURLPassword(fileObject.toString()), e);
                 }
             }
         } catch (FileSystemException e) {
@@ -825,17 +934,17 @@ public class FilePollingConsumer {
     /**
      * Comparator classed used to sort the files according to user input
      */
-    class FileNameAscComparator implements Comparator<FileObject> {
+    static class FileNameAscComparator implements Comparator<FileObject> {
         @Override
         public int compare(FileObject o1, FileObject o2) {
             return o1.getName().compareTo(o2.getName());
         }
     }
 
-    class FileLastmodifiedtimestampAscComparator implements Comparator<FileObject> {
+    static class FileLastmodifiedtimestampAscComparator implements Comparator<FileObject> {
         @Override
         public int compare(FileObject o1, FileObject o2) {
-            Long lDiff = 0l;
+            Long lDiff = 0L;
             try {
                 lDiff = o1.getContent().getLastModifiedTime()
                         - o2.getContent().getLastModifiedTime();
@@ -846,10 +955,10 @@ public class FilePollingConsumer {
         }
     }
 
-    class FileSizeAscComparator implements Comparator<FileObject> {
+    static class FileSizeAscComparator implements Comparator<FileObject> {
         @Override
         public int compare(FileObject o1, FileObject o2) {
-            Long lDiff = 0l;
+            Long lDiff = 0L;
             try {
                 lDiff = o1.getContent().getSize() - o2.getContent().getSize();
             } catch (FileSystemException e) {
@@ -859,17 +968,17 @@ public class FilePollingConsumer {
         }
     }
 
-    class FileNameDesComparator implements Comparator<FileObject> {
+    static class FileNameDesComparator implements Comparator<FileObject> {
         @Override
         public int compare(FileObject o1, FileObject o2) {
             return o2.getName().compareTo(o1.getName());
         }
     }
 
-    class FileLastmodifiedtimestampDesComparator implements Comparator<FileObject> {
+    static class FileLastmodifiedtimestampDesComparator implements Comparator<FileObject> {
         @Override
         public int compare(FileObject o1, FileObject o2) {
-            Long lDiff = 0l;
+            Long lDiff = 0L;
             try {
                 lDiff = o2.getContent().getLastModifiedTime()
                         - o1.getContent().getLastModifiedTime();
@@ -880,10 +989,10 @@ public class FilePollingConsumer {
         }
     }
 
-    class FileSizeDesComparator implements Comparator<FileObject> {
+    static class FileSizeDesComparator implements Comparator<FileObject> {
         @Override
         public int compare(FileObject o1, FileObject o2) {
-            Long lDiff = 0l;
+            Long lDiff = 0L;
             try {
                 lDiff = o2.getContent().getSize() - o1.getContent().getSize();
             } catch (FileSystemException e) {

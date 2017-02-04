@@ -32,7 +32,7 @@ import java.util.Map;
 public class PollingTaskScheduler {
     private static final Logger log = LoggerFactory.getLogger(PollingTaskScheduler.class);
 
-    protected long interval;
+    protected long interval = 1000L;    //todo: decide a suitable default polling interval at the review
     protected String name;
 
     private HashMap<Thread, PollingTaskRunner> inboundRunnersThreadsMap = new HashMap<>();
@@ -48,7 +48,7 @@ public class PollingTaskScheduler {
         runningThread.start();
 
         //simple execution where polling will happen only once.
-//        task.execute();
+//        task.taskExecute();
     }
 
     /**

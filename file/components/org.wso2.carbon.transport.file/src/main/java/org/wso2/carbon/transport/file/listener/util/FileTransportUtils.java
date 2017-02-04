@@ -32,9 +32,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.regex.Matcher;
@@ -57,24 +59,26 @@ public class FileTransportUtils {
             FileSystemOptions opts = new FileSystemOptions();
             DelegatingFileSystemOptionsBuilder delegate = new DelegatingFileSystemOptionsBuilder(fsManager);
             if (Constants.SCHEME_SFTP.equals(options.get(Constants.SCHEME))) {
-                Iterator i$ = options.keySet().iterator();
+                Iterator itr = options.entrySet().iterator();
 
-                while (i$.hasNext()) {
-                    String key = (String) i$.next();
-                    Constants.SFTP_FILE_OPTION[] arr$ = Constants.SFTP_FILE_OPTION.values();
-                    int len$ = arr$.length;
+                while (itr.hasNext()) {
+                    Map.Entry<String, String> entry = (Map.Entry<String, String>) itr.next();
+                    Constants.SftpFileOption[] array = Constants.SftpFileOption.values();
+                    int length = array.length;
 
-                    for (int i$1 = 0; i$1 < len$; ++i$1) {
-                        Constants.SFTP_FILE_OPTION o = arr$[i$1];
-                        if (key.equals(o.toString()) && null != options.get(key)) {
-                            delegate.setConfigString(opts, Constants.SCHEME_SFTP, key.toLowerCase(), (String) options.get(key));
+                    for (int i = 0; i < length; ++i) {
+                        Constants.SftpFileOption o = array[i];
+                        if (entry.getKey().equals(o.toString()) && null != entry.getValue()) {
+                            delegate.setConfigString(opts, Constants.SCHEME_SFTP,
+                                    entry.getKey().toLowerCase(Locale.US), entry.getValue());
                         }
                     }
                 }
             }
             if (options.get(Constants.FILE_TYPE) != null) {
                 delegate.setConfigString(opts, options.get(Constants.SCHEME),
-                        Constants.FILE_TYPE, String.valueOf(getFileType((String) options.get(Constants.FILE_TYPE))));
+                        Constants.FILE_TYPE, String.valueOf(getFileType(
+                                (String) options.get(Constants.FILE_TYPE))));
             }
             return opts;
         }
@@ -103,12 +107,15 @@ public class FileTransportUtils {
                 return true;
             }
         } catch (FileSystemException var5) {
-            log.error("Couldn\'t release the fail for the file : " + maskURLPassword(fo.getName().getURI()));
+            log.error("Couldn\'t release the fail for the file : " +
+                    maskURLPassword(fo.getName().getURI()));
         }
         return false;
     }
 
-    public static synchronized boolean acquireLock(FileSystemManager fsManager, FileObject fo, FileLockingParamsDTO paramDTO, FileSystemOptions fso, boolean isListener) {
+    public static synchronized boolean acquireLock(FileSystemManager fsManager, FileObject fo,
+                                                   FileLockingParamsDTO paramDTO,
+                                                   FileSystemOptions fso, boolean isListener) {
         Random random = new Random();
         String strLockValue = String.valueOf(random.nextLong());
 
@@ -116,32 +123,37 @@ public class FileTransportUtils {
             strLockValue = strLockValue + ":" + InetAddress.getLocalHost().getHostName();
             strLockValue = strLockValue + ":" + InetAddress.getLocalHost().getHostAddress();
         } catch (UnknownHostException var24) {
-            if(log.isDebugEnabled()) {
+            if (log.isDebugEnabled()) {
                 log.debug("Unable to get the Hostname or IP.");
             }
         }
 
         strLockValue = strLockValue + ":" + (new Date()).getTime();
-        byte[] lockValue = strLockValue.getBytes();
+        byte[] lockValue = strLockValue.getBytes(Charset.defaultCharset());
         FileObject lockObject = null;
 
         try {
             String fse = fo.getName().getURI();
             int e = fse.indexOf("?");
-            if(e != -1) {
+            if (e != -1) {
                 fse = fse.substring(0, e);
             }
 
             lockObject = fsManager.resolveFile(fse + ".lock", fso);
-            if(lockObject.exists()) {
-                log.debug("There seems to be an external lock, aborting the processing of the file " + maskURLPassword(fo.getName().getURI()) + ". This could possibly be due to some other party already " + "processing this file or the file is still being uploaded");
-                if(paramDTO != null && paramDTO.isAutoLockRelease()) {
-                    releaseLock(lockValue, strLockValue, lockObject, Boolean.valueOf(paramDTO.isAutoLockReleaseSameNode()), paramDTO.getAutoLockReleaseInterval());
+            if (lockObject.exists()) {
+                log.debug("There seems to be an external lock, aborting the processing of the file "
+                        + maskURLPassword(fo.getName().getURI()) +
+                        ". This could possibly be due to some other party already "
+                        + "processing this file or the file is still being uploaded");
+                if (paramDTO != null && paramDTO.isAutoLockRelease()) {
+                    releaseLock(lockValue, strLockValue, lockObject,
+                            Boolean.valueOf(paramDTO.isAutoLockReleaseSameNode()),
+                            paramDTO.getAutoLockReleaseInterval());
                 }
             } else {
-                if(isListener) {
+                if (isListener) {
                     FileObject stream = fsManager.resolveFile(fse, fso);
-                    if(!stream.exists()) {
+                    if (!stream.exists()) {
                         return false;
                     }
                 }
@@ -149,7 +161,8 @@ public class FileTransportUtils {
                 lockObject.createFile();
                 OutputStream stream1 = lockObject.getContent().getOutputStream();
 
-                label128: {
+                label128:
+                {
                     boolean var13;
                     try {
                         stream1.write(lockValue);
@@ -158,7 +171,8 @@ public class FileTransportUtils {
                         break label128;
                     } catch (IOException var21) {
                         lockObject.delete();
-                        log.error("Couldn\'t create the lock file before processing the file " + maskURLPassword(fse), var21);
+                        log.error("Couldn\'t create the lock file before processing the file "
+                                + maskURLPassword(fse), var21);
                         var13 = false;
                     } finally {
                         lockObject.close();
@@ -168,13 +182,14 @@ public class FileTransportUtils {
                 }
 
                 FileObject verifyingLockObject = fsManager.resolveFile(fse + ".lock", fso);
-                if(verifyingLockObject.exists() && verifyLock(lockValue, verifyingLockObject)) {
+                if (verifyingLockObject.exists() && verifyLock(lockValue, verifyingLockObject)) {
                     return true;
                 }
             }
         } catch (FileSystemException var23) {
-            log.error("Cannot get the lock for the file : " + maskURLPassword(fo.getName().getURI()) + " before processing", var23);
-            if(lockObject != null) {
+            log.error("Cannot get the lock for the file : "
+                    + maskURLPassword(fo.getName().getURI()) + " before processing", var23);
+            if (lockObject != null) {
                 try {
                     fsManager.closeFileSystem(lockObject.getParent().getFileSystem());
                 } catch (FileSystemException var20) {
@@ -198,12 +213,13 @@ public class FileTransportUtils {
                 lockObject.delete();
             }
         } catch (FileSystemException var6) {
-            log.error("Couldn\'t release the lock for the file : " + maskURLPassword(fo.getName().getURI()) + " after processing");
+            log.error("Couldn\'t release the lock for the file : "
+                    + maskURLPassword(fo.getName().getURI()) + " after processing");
         }
     }
 
     public static synchronized void markFailRecord(FileSystemManager fsManager, FileObject fo) {
-        byte[] failValue = Long.toString((new Date()).getTime()).getBytes();
+        byte[] failValue = Long.toString((new Date()).getTime()).getBytes(Charset.defaultCharset());
         try {
             String fse = fo.getName().getURI();
             int pos = fse.indexOf("?");
@@ -221,12 +237,14 @@ public class FileTransportUtils {
                 stream.close();
             } catch (IOException var12) {
                 failObject.delete();
-                log.error("Couldn\'t create the fail file before processing the file " + maskURLPassword(fse), var12);
+                log.error("Couldn\'t create the fail file before processing the file " +
+                        maskURLPassword(fse), var12);
             } finally {
                 failObject.close();
             }
         } catch (FileSystemException var14) {
-            log.error("Cannot get the lock for the file : " + maskURLPassword(fo.getName().getURI()) + " before processing");
+            log.error("Cannot get the lock for the file : "
+                    + maskURLPassword(fo.getName().getURI()) + " before processing");
         }
     }
 
@@ -242,7 +260,8 @@ public class FileTransportUtils {
                 failObject.delete();
             }
         } catch (FileSystemException var5) {
-            log.error("Couldn\'t release the fail for the file : " + maskURLPassword(fo.getName().getURI()));
+            log.error("Couldn\'t release the fail for the file : "
+                    + maskURLPassword(fo.getName().getURI()));
         }
     }
 
@@ -251,7 +270,7 @@ public class FileTransportUtils {
             InputStream e = lockObject.getContent().getInputStream();
             byte[] val = new byte[lockValue.length];
             e.read(val);
-            if(Arrays.equals(lockValue, val) && e.read() == -1) {
+            if (Arrays.equals(lockValue, val) && e.read() == -1) {
                 return true;
             } else {
                 log.debug("The lock has been acquired by an another party");
@@ -266,15 +285,19 @@ public class FileTransportUtils {
         }
     }
 
-    private static boolean releaseLock(byte[] bLockValue, String sLockValue, FileObject lockObject, Boolean autoLockReleaseSameNode, Long autoLockReleaseInterval) {
+    private static boolean releaseLock(byte[] bLockValue, String sLockValue,
+                                       FileObject lockObject, Boolean autoLockReleaseSameNode,
+                                       Long autoLockReleaseInterval) {
         try {
             InputStream e = lockObject.getContent().getInputStream();
             byte[] val = new byte[bLockValue.length];
             e.read(val);
-            String strVal = new String(val);
+            String strVal = new String(val, Charset.defaultCharset());
             String[] arrVal = strVal.split(":");
             String[] arrValNew = sLockValue.split(":");
-            if(arrVal.length == 4 && arrValNew.length == 4 && (!autoLockReleaseSameNode.booleanValue() || arrVal[1].equals(arrValNew[1]) && arrVal[2].equals(arrValNew[2]))) {
+            if (arrVal.length == 4 && arrValNew.length == 4
+                    && (!autoLockReleaseSameNode.booleanValue()
+                    || arrVal[1].equals(arrValNew[1]) && arrVal[2].equals(arrValNew[2]))) {
                 long lInterval = 0L;
 
                 try {
@@ -283,7 +306,8 @@ public class FileTransportUtils {
                     ;
                 }
 
-                if(autoLockReleaseInterval == null || autoLockReleaseInterval.longValue() <= lInterval) {
+                if (autoLockReleaseInterval == null
+                        || autoLockReleaseInterval.longValue() <= lInterval) {
                     try {
                         lockObject.delete();
                     } catch (Exception var19) {
@@ -307,7 +331,7 @@ public class FileTransportUtils {
     }
 
     private static Integer getFileType(String fileType) {
-        fileType = fileType.toUpperCase();
+        fileType = fileType.toUpperCase(Locale.US);
         return Constants.ASCII_TYPE.equals(fileType) ? Integer.valueOf(0) : (
                 Constants.BINARY_TYPE.equals(fileType) ? Integer.valueOf(2) : (
                         Constants.EBCDIC_TYPE.equals(fileType) ? Integer.valueOf(1) : (

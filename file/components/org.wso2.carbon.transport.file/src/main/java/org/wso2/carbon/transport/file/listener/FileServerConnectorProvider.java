@@ -16,23 +16,28 @@
  * under the License.
  */
 
-package org.wso2.carbon.transport.file.message;
+package org.wso2.carbon.transport.file.listener;
 
-import org.wso2.carbon.messaging.CarbonMessage;
+import org.wso2.carbon.messaging.ServerConnector;
+import org.wso2.carbon.messaging.ServerConnectorProvider;
 
-import java.io.InputStream;
+import java.util.List;
 
 /**
- * File based representation for CarbonMessage.
+ * Server connector provider for File transport.
  */
-public class FileCarbonMessage extends CarbonMessage {
-    private InputStream inputStream;
-    public FileCarbonMessage(InputStream inputStream) {
-        this.inputStream = inputStream;
+public class FileServerConnectorProvider extends ServerConnectorProvider {
+    public FileServerConnectorProvider(String protocol) {
+        super(protocol);
     }
 
     @Override
-    public InputStream getInputStream() {
-        return inputStream;
+    public List<ServerConnector> initializeConnectors() {
+        return null;
+    }
+
+    @Override
+    public ServerConnector createConnector(String s) {
+        return new FileServerConnector(s);
     }
 }

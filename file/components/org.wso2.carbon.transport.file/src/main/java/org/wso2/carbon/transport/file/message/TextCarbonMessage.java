@@ -20,19 +20,37 @@ package org.wso2.carbon.transport.file.message;
 
 import org.wso2.carbon.messaging.CarbonMessage;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
- * File based representation for CarbonMessage.
+ * {@link CarbonMessage} type for Text Messages. This message type is better if you are dealing with
+ * text data. This will work as the text data carrier from transport level to application level.
  */
-public class FileCarbonMessage extends CarbonMessage {
-    private InputStream inputStream;
-    public FileCarbonMessage(InputStream inputStream) {
-        this.inputStream = inputStream;
+public class TextCarbonMessage extends CarbonMessage {
+
+    private final String text;
+
+    /**
+     * @param text Text Message
+     */
+    public TextCarbonMessage(String text) {
+        this.text = text;
     }
 
+    /**
+     * @return String included in Text Message.
+     */
+    public String getText() {
+        return text;
+    }
+    
     @Override
     public InputStream getInputStream() {
-        return inputStream;
+        if (text == null) {
+            return null;
+        }
+        return new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8));
     }
 }

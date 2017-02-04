@@ -18,11 +18,14 @@
 
 package org.wso2.carbon.transport.file.listener.config;
 
-import java.util.Properties;
+import java.util.Map;
 
+/**
+ * Stores the parameters specific to File transport.
+ */
 public class FileTransportParams {
     private String name;
-    private Properties properties;
+    private Map<String, String> properties;
 
     public String getName() {
         return name;
@@ -32,11 +35,11 @@ public class FileTransportParams {
         this.name = name;
     }
 
-    public Properties getProperties() {
+    public Map<String, String> getProperties() {
         return properties;
     }
 
-    public void setProperties(Properties properties) {
+    public void setProperties(Map<String, String> properties) {
         this.properties = properties;
     }
 }
